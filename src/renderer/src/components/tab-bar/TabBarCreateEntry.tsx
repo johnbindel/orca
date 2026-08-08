@@ -28,6 +28,7 @@ import {
 } from './TabBarCreateEntryRow'
 import { dropFileEntriesCoveredByTabResults } from './open-tab-entry-dedupe'
 import { activateOpenTabSearchResult } from './open-tab-selection-routing'
+import type { OpenTabSearchResult } from './open-tab-search'
 import { useOpenTabSearch } from './use-open-tab-search'
 import type { TuiAgent } from '../../../../shared/types'
 import { translate } from '@/i18n/i18n'
@@ -44,6 +45,7 @@ function omniboxPlaceholder(): string {
 
 const EMPTY_AGENT_OPTIONS: readonly TabAgentLaunchOption[] = []
 const EMPTY_MENU_OPTIONS: readonly TabCreateMenuOption[] = []
+const EMPTY_TAB_RESULTS: readonly OpenTabSearchResult[] = []
 
 type TabBarCreateEntryProps = {
   agentOptions?: readonly TabAgentLaunchOption[]
@@ -84,7 +86,10 @@ export default function TabBarCreateEntry({
   const [lastMenuOpen, setLastMenuOpen] = useState(menuOpen)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileList = useRuntimeFileListForWorktree({ enabled: menuOpen, worktreeId })
-  const tabResults = useOpenTabSearch({ enabled: menuOpen, query, worktreeId })
+  const tabSearch = useOpenTabSearch({ enabled: menuOpen, query, worktreeId })
+  // Why gate on the query: the search defers, so its rows can still describe an
+  // earlier query — Enter must never submit a tab the current query never matched.
+  const tabResults = tabSearch.query === query ? tabSearch.results : EMPTY_TAB_RESULTS
   const shouldResolveAbsolutePaths = menuOpen && isTabEntryAbsolutePathLike(query.trim())
   const allowAbsolutePathsSelector = useMemo(
     () =>
@@ -328,12 +333,15 @@ export default function TabBarCreateEntry({
         />
       </div>
       {/* Above the list, not instead of it: a stale switch target must not wipe
-          the rows the user can still act on. */}
-      {switchError ? (
-        <div className="mt-1 px-1">
-          <EntryStatusRow message={switchError} />
-        </div>
-      ) : null}
+          the rows the user can still act on. The live region stays mounted so a
+          screen reader announces the failure instead of missing the insertion. */}
+      <div role="status">
+        {switchError ? (
+          <div className="mt-1 px-1">
+            <EntryStatusRow message={switchError} />
+          </div>
+        ) : null}
+      </div>
       {error || activeOptions.length > 0 || hasQuery ? (
         <div
           className="mt-1 space-y-0.5 px-1"
